@@ -8,39 +8,10 @@ from __future__ import print_function
 import numpy as np
 
 from keras.models import Sequential
-from keras.layers import Merge, LSTM, Dense
-import pandas as pd
-import sys
-import os
-import scipy as sp
-import matplotlib.pyplot as plt
-from keras.callbacks import ModelCheckpoint,EarlyStopping
-from sklearn.cross_validation import StratifiedKFold, KFold
-from sklearn.metrics import log_loss
-from sklearn.cluster import DBSCAN
-from sklearn import metrics as skmetrics
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-from keras.layers.normalization import BatchNormalization
-from collections import Counter
-from keras.layers.advanced_activations import PReLU,SReLU
 from keras.models import Model
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation
-from keras.wrappers.scikit_learn import KerasClassifier
-from keras.utils import np_utils
-from keras.optimizers import SGD
-from keras.layers import Input, Embedding, LSTM, Dense, Lambda, Flatten, Dropout, merge,Convolution1D,MaxPooling1D,Lambda,AveragePooling1D
-from sklearn.cross_validation import cross_val_score
-from sklearn.cross_validation import KFold
-from sklearn.preprocessing import LabelEncoder
-from sklearn.pipeline import Pipeline
-from sklearn.cross_validation import train_test_split
-from sklearn.metrics import log_loss
+from keras.layers import Input, Embedding, Dense, Lambda, Merge
 from keras.utils.visualize_util import plot
 from keras import backend as K
-from scipy.sparse import *
-
 
 import data
 import metrics
