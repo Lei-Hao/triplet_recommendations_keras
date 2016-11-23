@@ -7,13 +7,39 @@ from __future__ import print_function
 
 import numpy as np
 
-import theano
-
-import keras
+from keras.models import Sequential
+from keras.layers import Merge, LSTM, Dense
+import pandas as pd
+import sys
+import os
+import scipy as sp
+import matplotlib.pyplot as plt
+from keras.callbacks import ModelCheckpoint,EarlyStopping
+from sklearn.cross_validation import StratifiedKFold, KFold
+from sklearn.metrics import log_loss
+from sklearn.cluster import DBSCAN
+from sklearn import metrics as skmetrics
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from keras.layers.normalization import BatchNormalization
+from collections import Counter
+from keras.layers.advanced_activations import PReLU,SReLU
+from keras.models import Model
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Activation
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from keras.optimizers import SGD
+from keras.layers import Input, Embedding, LSTM, Dense, Lambda, Flatten, Dropout, merge,Convolution1D,MaxPooling1D,Lambda,AveragePooling1D
+from sklearn.cross_validation import cross_val_score
+from sklearn.cross_validation import KFold
+from sklearn.preprocessing import LabelEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.cross_validation import train_test_split
+from sklearn.metrics import log_loss
+from keras.utils.visualize_util import plot
 from keras import backend as K
-from keras.models import Sequential, Graph
-from keras.layers.core import Dense, Lambda
-from keras.optimizers import Adagrad, Adam
+from scipy.sparse import *
 
 
 import data
@@ -25,6 +51,7 @@ def identity_loss(y_true, y_pred):
     return K.mean(y_pred - 0 * y_true)
 
 
+'''
 def bpr_triplet_loss(X):
 
     user_latent, item_latent = X.values()
@@ -35,8 +62,19 @@ def bpr_triplet_loss(X):
                        - K.sum(user_latent * negative_item_latent, axis=-1, keepdims=True))
 
     return loss
+'''
 
+def bpr_triplet_loss(args):
 
+    user_latent, positive_item_latent, negative_item_latent = args
+
+    # BPR loss
+    loss = - K.sigmoid(K.sum(user_latent * positive_item_latent, axis=-1, keepdims=True)
+                       - K.sum(user_latent * negative_item_latent, axis=-1, keepdims=True))
+
+    return loss
+
+'''
 def margin_triplet_loss(X):
 
     user_latent, item_latent = X.values()
@@ -49,7 +87,19 @@ def margin_triplet_loss(X):
                      0.0)
 
     return loss
+'''
 
+
+def margin_triplet_loss(args):
+
+    user_latent, positive_item_latent, negative_item_latent = args
+    # Hinge loss: max(0, user * negative_item_latent + 1 - user * positive_item_latent)
+
+    loss = K.maximum(1.0
+                     + K.sum(user_latent * negative_item_latent, axis=-1, keepdims=True)
+                     - K.sum(user_latent * positive_item_latent, axis=-1, keepdims=True),
+                     0.0)
+    return loss
 
 def get_item_subgraph(input_shape, latent_dim):
     # Could take item metadata here, do convolutional layers etc.
@@ -69,7 +119,37 @@ def get_user_subgraph(input_shape, latent_dim):
 
     return model
 
+def triple_loss_model(num_users, num_items, latent_dim):
 
+    inputs = []
+
+    input_user = Input(shape=(num_users,), name='user_input')
+    input_p_item = Input(shape=(num_items,), name='positive_item_input')
+    input_n_item = Input(shape=(num_items,), name='negative_item_input')
+
+    inputs.append(input_user)
+    inputs.append(input_p_item)
+    inputs.append(input_n_item)
+
+    dense_user = Dense(latent_dim, name='user_latent')(input_user)
+
+    dense_item = Dense(latent_dim, name='item_latent')
+    dense_p_item = dense_item(input_p_item)
+    dense_n_item = dense_item(input_n_item)
+
+    #output = Lambda(margin_triplet_loss, name='triplet_loss', output_shape=(1, ))([dense_user, dense_p_item,
+                                                                                   #dense_n_item])
+
+    output = Lambda(bpr_triplet_loss, name='triplet_loss', output_shape=(1, ))([dense_user, dense_p_item,
+                                                                                dense_n_item])
+
+    model = Model(input=inputs, output=output)
+    model.compile(loss=identity_loss, optimizer='adam')
+    print('compile completed')
+
+    return model
+
+'''
 def get_graph(num_users, num_items, latent_dim):
 
     batch_input_shape = (1,)
@@ -105,13 +185,14 @@ def get_graph(num_users, num_items, latent_dim):
     model.compile(loss={'triplet_loss': identity_loss}, optimizer=Adam())#Adagrad(lr=0.1, epsilon=1e-06))
 
     return model
+'''
 
 
 def count_inversions(model, user_features, posititve_item_features, negative_item_features):
 
     loss = model.predict({'user_input': user_features,
                           'positive_item_input': posititve_item_features,
-                          'negative_item_input': negative_item_features})['triplet_loss']
+                          'negative_item_input': negative_item_features})
 
     return (loss > 0).mean()
 
@@ -130,13 +211,16 @@ if __name__ == '__main__':
                                                                                                            test_pid,
                                                                                                            test_nid,
                                                                                                            num_users,
-                                                                                                           num_items)
-
+                                                                                                          num_items)
     # Sample triplets from the training data
     uid, pid, nid = data.get_triplets(train)
-    user_features, positive_item_features, negative_item_features = data.get_dense_triplets(uid, pid, nid, num_users, num_items)
+    user_features, positive_item_features, negative_item_features = data.get_dense_triplets(uid,
+                                                                                            pid,
+                                                                                            nid,
+                                                                                            num_users,
+                                                                                            num_items)
 
-    model = get_graph(num_users, num_items, 256)
+    model = triple_loss_model(num_users, num_items, 256)
 
     # Print the model structure
     print(model.summary())
@@ -150,18 +234,21 @@ if __name__ == '__main__':
 
         model.fit({'user_input': user_features,
                    'positive_item_input': positive_item_features,
-                   'negative_item_input': negative_item_features, 'triplet_loss': np.ones(len(uid))},
-                  validation_data={'user_input': test_user_features,
+                   'negative_item_input': negative_item_features}, {'triplet_loss': np.ones(len(uid))},
+                  validation_data=[{'user_input': test_user_features,
                                    'positive_item_input': test_positive_item_features,
-                                   'negative_item_input': test_negative_item_features, 'triplet_loss': np.ones(len(uid))},
+                                    'negative_item_input': test_negative_item_features},
+                                   {'triplet_loss': np.ones(len(test_uid))}],
                   batch_size=512,
                   nb_epoch=1, 
                   verbose=2,
                   shuffle=True)
 
         print('AUC %s' % metrics.full_auc(model, test))
+
         print('Inversions percentage %s' % count_inversions(model,
                                                             test_user_features,
                                                             test_positive_item_features,
                                                             test_negative_item_features))
+
 
