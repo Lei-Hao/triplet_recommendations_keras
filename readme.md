@@ -1,3 +1,4 @@
+update code to latest keras
 
 # Recommendations in Keras using triplet loss
 Along the lines of BPR [1]. 
